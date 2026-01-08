@@ -114,6 +114,8 @@ CLI точка входа с обработкой аргументов и орк
 
 ### Использование
 
+#### Вариант 1: Docker (рекомендуется)
+
 1. **Поместите видеофайлы в директорию `fixtures/`**
 
 2. **Соберите Docker образ:**
@@ -122,20 +124,58 @@ docker build -t voice-cleaner .
 ```
 
 3. **Запустите обработку:**
-```bash
-docker run --rm -v $(pwd)/fixtures:/app/fixtures -v $(pwd)/output:/app/output voice-cleaner
-```
 
-Или с кастомными путями:
+**Простая команда (копируйте и вставьте):**
 ```bash
 docker run --rm \
-  -v /path/to/input:/app/input \
-  -v /path/to/output:/app/output \
+  -v $(pwd)/fixtures:/app/fixtures \
+  -v $(pwd)/output:/app/output \
   voice-cleaner \
-  --input /app/input \
+  --input /app/fixtures \
   --output /app/output \
-  --preset default
+  --preset max_voice
 ```
+
+**Или используйте готовый скрипт:**
+```bash
+./DOCKER_RUN.sh
+```
+
+**Пример с другими пресетами:**
+```bash
+# Агрессивная обработка
+docker run --rm \
+  -v $(pwd)/fixtures:/app/fixtures \
+  -v $(pwd)/output:/app/output \
+  voice-cleaner \
+  --preset aggressive
+
+# Мягкая обработка
+docker run --rm \
+  -v $(pwd)/fixtures:/app/fixtures \
+  -v $(pwd)/output:/app/output \
+  voice-cleaner \
+  --preset light
+```
+
+#### Вариант 2: Локальный запуск
+
+Требуется установленный Python 3.11+ и ffmpeg:
+
+```bash
+python3 main.py --input fixtures --output output --preset max_voice
+```
+
+### Именование выходных файлов
+
+Выходные файлы автоматически получают имена с пресетом и timestamp:
+- Формат: `original_name_[preset]_YYYY-MM-DD_HH-MM-SS.mp4`
+- Пример: `video_max_voice_2026-01-09_01-19-16.mp4`
+
+Это позволяет:
+- Видеть, какой пресет использовался
+- Легко определить последний обработанный файл (по timestamp)
+- Хранить несколько версий одного файла с разными пресетами
 
 ### Параметры командной строки
 

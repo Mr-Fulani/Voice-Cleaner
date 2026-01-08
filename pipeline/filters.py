@@ -52,19 +52,23 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
     
     filters = []
     
-    # 1. Highpass фильтр - убираем инфранизкие частоты
+    # 1. Highpass фильтр - убираем инфранизкие частоты (музыка, басы)
     # Эти частоты не несут речевую информацию и могут создавать артефакты
+    # Более агрессивная фильтрация помогает убрать фоновую музыку
     highpass_freq = preset.get('highpass_freq', 80)
+    # Используем стандартный highpass (order по умолчанию)
     filters.append(f"highpass=f={highpass_freq}")
     logger.debug(f"Добавлен highpass: {highpass_freq} Hz")
     
-    # 2. Lowpass фильтр - убираем очень высокие частоты
+    # 2. Lowpass фильтр - убираем очень высокие частоты (шипение, шумы)
     # Уменьшает шум и артефакты, фокус на речевом диапазоне (300-3400 Hz)
+    # Более узкая полоса помогает убрать фоновые шумы
     lowpass_freq = preset.get('lowpass_freq', 8000)
+    # Используем стандартный lowpass
     filters.append(f"lowpass=f={lowpass_freq}")
     logger.debug(f"Добавлен lowpass: {lowpass_freq} Hz")
     
-    # 3. Шумоподавление (afftdn) - убираем фоновый шум
+    # 3. Шумоподавление (afftdn) - убираем фоновый шум, гул, шипение
     # Адаптируем агрессивность на основе уровня шума
     noise_reduction = preset.get('noise_reduction', {})
     nr = _adapt_noise_reduction(
@@ -72,8 +76,9 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
         analysis.get('noise_level_db', -45)
     )
     nt = noise_reduction.get('nt', 'w')
+    # Используем максимальное шумоподавление
     filters.append(f"afftdn=nr={nr}:nt={nt}")
-    logger.debug(f"Добавлен afftdn: nr={nr}, nt={nt}")
+    logger.debug(f"Добавлен afftdn: nr={nr}, nt={nt} (максимальное подавление)")
     
     # 4. Компрессор (acompressor) - выравниваем динамику
     # Делает тихую речь громче, громкую - тише
@@ -90,6 +95,7 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
     
     # 5. Эквалайзер (firequalizer) - частотная коррекция
     # Усиливаем речевые частоты (300-3000 Hz), убираем лишнее
+    # Критически важно для подавления музыки и усиления речи
     equalizer = preset.get('equalizer', {})
     eq_entries = equalizer.get('entries', [])
     if eq_entries:
@@ -104,17 +110,32 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
     filters.append(f"alimiter=limit={limit}")
     logger.debug(f"Добавлен alimiter: limit={limit}")
     
-    # 7. Нормализация громкости - компенсируем снижение от фильтров
+    # 7. Дополнительное подавление музыки через multiple highpass фильтры
+    # Множественные highpass помогают максимально агрессивно убрать низкие частоты музыки
+    noise_gate = preset.get('noise_gate_threshold', -35)
+    if noise_gate > -30:  # Если используется агрессивный режим
+        # Добавляем второй и третий highpass для остатков басов и низких частот музыки
+        second_highpass = min(highpass_freq + 30, 250)
+        third_highpass = min(highpass_freq + 50, 300)
+        filters.append(f"highpass=f={second_highpass}")
+        filters.append(f"highpass=f={third_highpass}")
+        logger.debug(f"Добавлены дополнительные highpass: {second_highpass} Hz и {third_highpass} Hz для максимального подавления басов музыки")
+    
+    # 8. Нормализация громкости - компенсируем снижение от фильтров
     # Фильтры (особенно highpass/lowpass и компрессор) могут снизить общий уровень
     # Добавляем усиление для компенсации, но не слишком агрессивно
     # Адаптируем на основе разницы между речью и шумом
     level_diff = analysis.get('speech_level_db', -18) - analysis.get('noise_level_db', -45)
     if level_diff > 20:
-        # Хорошее соотношение сигнал/шум - меньшее усиление
-        gain_db = 2.0
+        # Хорошее соотношение сигнал/шум - умеренное усиление
+        gain_db = 4.0
     else:
         # Плохое соотношение - большее усиление для компенсации
-        gain_db = 4.0
+        gain_db = 6.0
+    
+    # Для max_voice пресета добавляем дополнительное усиление речи
+    if noise_gate > -30:
+        gain_db += 2.0  # Дополнительные +2dB для голоса
     
     filters.append(f"volume={gain_db}dB")
     logger.debug(f"Добавлена нормализация громкости: +{gain_db}dB")

@@ -8,6 +8,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from datetime import datetime
 
 from pipeline.probe import get_streams_info, NoAudioStreamError, InvalidMediaFileError
 from pipeline.analysis import analyze_audio
@@ -61,7 +62,7 @@ def main():
         '--preset',
         type=str,
         default=default_preset,
-        help=f'Пресет обработки: light, default, aggressive (по умолчанию: {default_preset}, можно задать через DEFAULT_PRESET)'
+        help=f'Пресет обработки: light, default, aggressive, max_voice (по умолчанию: {default_preset}, можно задать через DEFAULT_PRESET)'
     )
     
     parser.add_argument(
@@ -142,7 +143,14 @@ def main():
             
             # Шаг 4: Обработка видео
             logger.info("Шаг 4: Применение фильтров...")
-            output_file = output_dir / video_file.name
+            # Добавляем пресет и timestamp к имени файла для различения версий
+            # Формат: original_name_[preset]_YYYY-MM-DD_HH-MM-SS.ext
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            preset_name = args.preset
+            file_stem = video_file.stem
+            file_suffix = video_file.suffix
+            output_filename = f"{file_stem}_{preset_name}_{timestamp}{file_suffix}"
+            output_file = output_dir / output_filename
             process_video(str(video_file), str(output_file), filter_chain)
             
             logger.info(f"✓ Успешно обработан: {video_file.name}")
