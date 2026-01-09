@@ -102,6 +102,23 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
         eq_string = _build_equalizer_string(eq_entries)
         filters.append(f"firequalizer=gain_entry='{eq_string}'")
         logger.debug(f"Добавлен firequalizer с {len(eq_entries)} точками")
+
+        # Дополнительное усиление речевых характеристик
+        if preset.get('voice_enhancement', False):
+            # Усиление согласных (3000 Hz) и звонких звуков (1000 Hz)
+            filters.append("equalizer=f=3000:width_type=o:width=1:g=2")
+            filters.append("equalizer=f=1000:width_type=o:width=1:g=1")
+            # Дополнительное усиление для четкости
+            filters.append("equalizer=f=4000:width_type=o:width=0.5:g=1")
+            logger.debug("Добавлено дополнительное усиление речевых характеристик")
+
+        # Дополнительные фильтры для ultra_clean
+        if preset.get('center_extraction', False) and preset.get('harmonic_analysis', False):
+            # Комбинированная обработка: центр + гармоники
+            # Добавляем еще один проход эквализации после извлечения центра
+            filters.append("equalizer=f=800:width_type=o:width=1:g=2")
+            filters.append("equalizer=f=2500:width_type=o:width=1:g=3")
+            logger.debug("Добавлена комбинированная обработка центр+гармоники")
     
     # 6. Лимитер (alimiter) - финальное ограничение пиков
     # Предотвращает клиппинг и перегрузку
@@ -114,12 +131,14 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
     # Множественные highpass помогают максимально агрессивно убрать низкие частоты музыки
     noise_gate = preset.get('noise_gate_threshold', -35)
     if noise_gate > -30:  # Если используется агрессивный режим
-        # Добавляем второй и третий highpass для остатков басов и низких частот музыки
-        second_highpass = min(highpass_freq + 30, 250)
-        third_highpass = min(highpass_freq + 50, 300)
+        # Добавляем второй, третий и четвертый highpass для максимального подавления
+        second_highpass = min(highpass_freq + 40, 290)
+        third_highpass = min(highpass_freq + 80, 330)
+        fourth_highpass = min(highpass_freq + 120, 370)
         filters.append(f"highpass=f={second_highpass}")
         filters.append(f"highpass=f={third_highpass}")
-        logger.debug(f"Добавлены дополнительные highpass: {second_highpass} Hz и {third_highpass} Hz для максимального подавления басов музыки")
+        filters.append(f"highpass=f={fourth_highpass}")
+        logger.debug(f"Добавлены дополнительные highpass: {second_highpass}, {third_highpass}, {fourth_highpass} Hz для экстремального подавления басов")
     
     # 8. Нормализация громкости - компенсируем снижение от фильтров
     # Фильтры (особенно highpass/lowpass и компрессор) могут снизить общий уровень
@@ -128,14 +147,14 @@ def build_audio_filter(analysis: dict, preset: dict) -> str:
     level_diff = analysis.get('speech_level_db', -18) - analysis.get('noise_level_db', -45)
     if level_diff > 20:
         # Хорошее соотношение сигнал/шум - умеренное усиление
-        gain_db = 4.0
+        gain_db = 5.0
     else:
         # Плохое соотношение - большее усиление для компенсации
-        gain_db = 6.0
-    
-    # Для max_voice пресета добавляем дополнительное усиление речи
+        gain_db = 8.0
+
+    # Для max_voice пресета добавляем максимальное усиление речи
     if noise_gate > -30:
-        gain_db += 2.0  # Дополнительные +2dB для голоса
+        gain_db += 3.0  # Дополнительные +3dB для голоса
     
     filters.append(f"volume={gain_db}dB")
     logger.debug(f"Добавлена нормализация громкости: +{gain_db}dB")
